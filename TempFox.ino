@@ -1,3 +1,4 @@
+
 /// 
 /// @mainpage	DHT22 temperature and humidity sensor library
 /// @details	DHT22 on LaunchPad
@@ -68,13 +69,17 @@
 //#define DHTPIN P1_4
 #define DHTPIN P2_3
 #define YELLOW_LED P1_0
-#include <SPI.h>
-// set pin 8 as the slave select for the digital pot:
-const int slaveSelectPin = SS;
-const int chipSelectPin = P2_1; 
 
-const byte READ = 0b11111100;   // SCP1000's read command
-const byte WRITE = 0b00000010;  // SCP1000's write command
+#include <Enrf24.h>
+#include <nRF24L01.h>
+#include <string.h>
+#include <SPI.h>
+
+Enrf24 radio(P2_0, P2_1, P2_2);  // P2.0=CE, P2.1=CSN, P2.2=IRQ
+const uint8_t txaddr[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0x01 };
+const char *str_on = "ON";
+const char *str_off = "OFF";
+void dump_radio_status_to_serialport(uint8_t);
 
 DHT22 mySensor(DHTPIN);
 boolean flag;
@@ -83,32 +88,106 @@ void setup() {
   pinMode(YELLOW_LED, OUTPUT);
   
   Serial.begin(9600);
-  Serial.println("\n\n\n*** DHT22 test starts"); 
-  Serial.println("PUSH2 to end"); 
-  pinMode(PUSH2, INPUT_PULLUP);     
-  
-  mySensor.begin();
-  // initialize SPI:
-  SPI.begin(); 
 
-}
+  //setup SPI
+  SPI.begin();
+  SPI.setDataMode(SPI_MODE0);
+  SPI.setBitOrder(MSBFIRST);
+ 
+   radio.begin();
+   dump_radio_status_to_serialport(radio.radioState());
+   radio.setTXaddress((void*)txaddr);
+ 
+  // setup DHT
+  mySensor.begin();
+
+ }
 
 void loop() {
   digitalWrite(YELLOW_LED,LOW);
-  delay(2000);
+  delay(500);
   // Reading temperature or humidity takes about 250 milliseconds!
   // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
   digitalWrite(YELLOW_LED,HIGH);  
   flag = mySensor.get();
-  
   printDHT(flag, mySensor.humidityX10(), mySensor.temperatureX10());
   
-  writeSpiRegister(0x03, 0x0A);
   
-  if (digitalRead(PUSH2)==LOW) {
-    Serial.println("\n\n*** End"); 
-    Serial.end();
-    while(true); // endless loop
+  //flashLed(100,5);
+  Serial.print("Sending packet: ");
+  Serial.println(str_on);
+  radio.print(str_on);
+  radio.flush();  // Force transmit (don't wait for any more data)
+  dump_radio_status_to_serialport(radio.radioState());  // Should report IDLE
+  delay(500);
+
+  Serial.print("Sending packet: ");
+  Serial.println(str_off);
+  radio.print(str_off);
+  radio.flush();  //
+  dump_radio_status_to_serialport(radio.radioState());  // Should report IDLE
+  
+}
+
+
+void flashLed(int time, int NrOfFlash) {
+  for (int i=0; i <= NrOfFlash; i++){
+    digitalWrite(YELLOW_LED,LOW);  
+    delay(time/2);
+    digitalWrite(YELLOW_LED,HIGH);  
+    delay(time/2);
+   } 
+
+}
+int16_t GetBatteryVoltage()
+{
+  //TODO
+  // measure batteryvoltage on ADC pin, report back.
+  // see AnalogInput example,
+  // use one of the 8 channels
+}
+void sendPacket() {
+  Serial.print("Sending packet: ");
+  Serial.println(str_on);
+  radio.print(str_on);
+  radio.flush();  // Force transmit (don't wait for any more data)
+  dump_radio_status_to_serialport(radio.radioState());  // Should report IDLE
+  delay(200);
+
+  Serial.print("Sending packet: ");
+  Serial.println(str_off);
+  radio.print(str_off);
+  radio.flush();  //
+  dump_radio_status_to_serialport(radio.radioState());  // Should report IDLE
+  delay(200);
+}
+
+void dump_radio_status_to_serialport(uint8_t status)
+{
+  Serial.print("Enrf24 radio transceiver status: ");
+  switch (status) {
+    case ENRF24_STATE_NOTPRESENT:
+      Serial.println("NO TRANSCEIVER PRESENT");
+      break;
+
+    case ENRF24_STATE_DEEPSLEEP:
+      Serial.println("DEEP SLEEP <1uA power consumption");
+      break;
+
+    case ENRF24_STATE_IDLE:
+      Serial.println("IDLE module powered up w/ oscillators running");
+      break;
+
+    case ENRF24_STATE_PTX:
+      Serial.println("Actively Transmitting");
+      break;
+
+    case ENRF24_STATE_PRX:
+      Serial.println("Receive Mode");
+      break;
+
+    default:
+      Serial.println("UNKNOWN STATUS CODE");
   }
 }
 
@@ -135,59 +214,3 @@ void printDHT(boolean flag, int32_t humidity, int32_t temperature)
   }
   
 }
-
-//Sends a write command to SCP1000
-
-void writeSpiRegister(byte thisRegister, byte thisValue) {
-
-  // SCP1000 expects the register address in the upper 6 bits
-  // of the byte. So shift the bits left by two bits:
-  thisRegister = thisRegister << 2;
-  // now combine the register address and the command into one byte:
-  byte dataToSend = thisRegister | WRITE;
-  // take the chip select low to select the device:
-  digitalWrite(chipSelectPin, LOW);
-
-  SPI.transfer(dataToSend); //Send register location
-  SPI.transfer(thisValue);  //Send value to record into register
-
-  // take the chip select high to de-select:
-  digitalWrite(chipSelectPin, HIGH);
-}
-
-//Read from or write to register from the SCP1000:
-unsigned int readSpiRegister(byte thisRegister, int bytesToRead ) {
-  byte inByte = 0;           // incoming byte from the SPI
-  unsigned int result = 0;   // result to return
-  Serial.print(thisRegister, BIN);
-  Serial.print("\t");
-  // SCP1000 expects the register name in the upper 6 bits
-  // of the byte. So shift the bits left by two bits:
-  thisRegister = thisRegister << 2;
-  // now combine the address and the command into one byte
-  byte dataToSend = thisRegister & READ;
-  Serial.println(thisRegister, BIN);
-  // take the chip select low to select the device:
-  digitalWrite(chipSelectPin, LOW);
-  // send the device the register you want to read:
-  SPI.transfer(dataToSend);
-  // send a value of 0 to read the first byte returned:
-  result = SPI.transfer(0x00);
-  // decrement the number of bytes left to read:
-  bytesToRead--;
-  // if you still have another byte to read:
-  if (bytesToRead > 0) {
-    // shift the first byte left, then get the second byte:
-    result = result << 8;
-    inByte = SPI.transfer(0x00);
-    // combine the byte you just got with the previous one:
-    result = result | inByte;
-    // decrement the number of bytes left to read:
-    bytesToRead--;
-  }
-  // take the chip select high to de-select:
-  digitalWrite(chipSelectPin, HIGH);
-  // return the result:
-  return(result);
-}
-
