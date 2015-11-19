@@ -57,6 +57,14 @@
 // Include application, user and local libraries
 #include "DHT22_430.h"
 
+// include software I2C
+#include "I2C_SoftwareLibrary.h"
+#define SCL_PIN P2_4 ///< pin for SCL
+#define SDA_PIN P2_3 ///< pin for SDA
+SoftwareWire Wire(SDA_PIN, SCL_PIN); ///< Instantiate SoftwareWire
+#define _address 0x18
+uint16_t _reading;
+
 
 ///
 /// @brief	Pin for DHT22 signal
@@ -100,6 +108,10 @@ void setup() {
  
   // setup DHT
   mySensor.begin();
+  
+  // setup Software i2c
+  Wire.begin();
+
 
  }
 
@@ -127,6 +139,26 @@ void loop() {
   radio.flush();  //
   dump_radio_status_to_serialport(radio.radioState());  // Should report IDLE
   
+  // send I2C cmd
+    //write
+    Wire.beginTransmission(_address);
+    Wire.write('A');
+    Wire.endTransmission();
+    // read
+    Wire.requestFrom(_address, 2);
+    while (Wire.available() < 2);
+    
+    flashLed(40,5);
+    _reading = Wire.read();
+    _reading = _reading << 8;
+    _reading += Wire.read();
+  Serial.print("I2C Read packet: ");
+    Serial.print(_reading/10, DEC);
+    Serial.print(".");
+    Serial.println(_reading%10, DEC);
+    
+
+  
 }
 
 
@@ -152,14 +184,14 @@ void sendPacket() {
   radio.print(str_on);
   radio.flush();  // Force transmit (don't wait for any more data)
   dump_radio_status_to_serialport(radio.radioState());  // Should report IDLE
-  delay(200);
+  delay(100);
 
   Serial.print("Sending packet: ");
   Serial.println(str_off);
   radio.print(str_off);
   radio.flush();  //
   dump_radio_status_to_serialport(radio.radioState());  // Should report IDLE
-  delay(200);
+  delay(100);
 }
 
 void dump_radio_status_to_serialport(uint8_t status)
