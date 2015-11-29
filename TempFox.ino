@@ -1,51 +1,4 @@
 
-/// 
-/// @mainpage	DHT22 temperature and humidity sensor library
-/// @details	DHT22 on LaunchPad
-/// @n
-/// @n		2012-06-15 First release
-/// @n		2012-06-17 Arduino-related code wiped-out
-/// @n		2012-06-17 int32_t only to avoid float and math.h
-/// @n		2012-07-02 LaunchPad release
-///
-/// @n @a	Developed with [embedXcode](http://embedXcode.weebly.com)
-/// 
-/// @author	Rei VILO
-/// @author	http://embeddedcomputing.weebly.com
-/// @date	Jul 02, 2012
-/// @version	2.01
-/// 
-/// @copyright	¬© Rei VILO, 2012
-/// @copyright	CC = BY NC SA
-///
-/// @see	
-/// @n		Based on http://www.ladyada.net/learn/sensors/dht.html
-/// @n		written by Adafruit Industries, MIT license
-/// @n		 
-/// @b		LaunchPad implementation 
-/// @n		by energia ¬ª Tue Jun 26, 2012 9:24 pm
-/// @n		http://www.43oh.com/forum/viewtopic.php?p=20821#p20821
-/// @n		As LaunchPad is faster than Arduino,
-/// *		1. replace delayMicroseconds(1) with delayMicroseconds(3)
-/// @n 	or
-/// *		2. compare counter to a higher number
-///
-
-///
-/// @file	DHT22_430_main.pde 
-/// @brief	Main sketch
-/// @details	DHT22 on LaunchPad
-/// @n @a	Developed with [embedXcode](http://embedXcode.weebly.com)
-/// 
-/// @author	Rei VILO
-/// @author	http://embeddedcomputing.weebly.com
-/// @date	Jul 02, 2012
-/// @version	2.01
-/// 
-/// @copyright	¬© Rei VILO, 2012
-/// @copyright	CC = BY NC SA
-///
-
 
 // Core library - MCU-based
 #if defined(__MSP430G2452__) || defined(__MSP430G2553__) || defined(__MSP430G2231__) // LaunchPad specific
@@ -56,6 +9,7 @@
 
 // Include application, user and local libraries
 #include "DHT22_430.h"
+#define YELLOW_LED P1_0
 
 // include software I2C
 #include "I2C_SoftwareLibrary.h"
@@ -66,17 +20,7 @@ SoftwareWire Wire(SDA_PIN, SCL_PIN); ///< Instantiate SoftwareWire
 uint16_t _reading;
 
 
-///
-/// @brief	Pin for DHT22 signal
-/// @n 		Connect 
-/// *		pin 1 (on the left) of the sensor to +5V
-/// *		pin 2 of the sensor to DHTPIN 
-/// *		pin 4 (on the right) of the sensor to GROUND
-/// @n		Place a 10k resistor between pin 2 (data) to pin 1 (power) of the sensor
-///
-//#define DHTPIN P1_4
 #define DHTPIN P2_3
-#define YELLOW_LED P1_0
 
 #include <Enrf24.h>
 #include <nRF24L01.h>
@@ -85,7 +29,9 @@ uint16_t _reading;
 
 Enrf24 radio(P2_0, P2_1, P2_2);  // P2.0=CE, P2.1=CSN, P2.2=IRQ
 const uint8_t txaddr[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0x01 };
-const uint8_t rxaddr[] = { 0xDE, 0xAD, 0xBE, 0xEF, 10 };
+
+const int8_t node_addr = 10;
+const uint8_t rxaddr[] = { 0xDE, 0xAD, 0xBE, 0xEF, node_addr };
 
 const char *str_on = "ON";
 const char *str_off = "OFF";
@@ -147,23 +93,9 @@ void loop() {
 //  Serial.println (voltage);
   delay(1000);
   
-  // Send data via RF24
-  //flashLed(100,5);
-  // TODO change to separate defined strings, then concatenate them!
-  tx_data_string = "";
-  tx_data_string += "Node " ;
-  tx_data_string += rxaddr[4];
-  tx_data_string += " Humidity " ;
-  tx_data_string += String(humidity/10);
-//  tx_data_string += "-";
-//  tx_data_string += String(humidity%10);
-  tx_data_string += " % Temp ";
-  tx_data_string += String(temperature/10);
-//  tx_data_string += "-";
-//  tx_data_string += String(temperature%10);
-  tx_data_string += " degC Voltage ";
-  tx_data_string += String(voltage);
-  tx_data_string += " mV";
+  
+  tx_data_string = compose_sensor_data(node_addr, humidity, temperature, voltage);
+  
   
   Serial.print("Sending packet: ");
   Serial.println(tx_data_string);
@@ -195,7 +127,6 @@ void loop() {
   
 }
 
-
 void flashLed(int time, int NrOfFlash) {
   for (int i=0; i <= NrOfFlash; i++){
     digitalWrite(YELLOW_LED,LOW);  
@@ -205,8 +136,8 @@ void flashLed(int time, int NrOfFlash) {
    } 
 
 }
-int16_t GetBatteryVoltage()
-{
+int16_t GetBatteryVoltage() {
+
   //TODO
   // measure batteryvoltage on ADC pin, report back.
   // see AnalogInput example,
@@ -257,7 +188,6 @@ void dump_radio_status_to_serialport(uint8_t status)
   }
 }
 
-
 // print DHT data
 void printDHT(boolean flag, int32_t humidity, int32_t temperature)
 {
@@ -279,6 +209,23 @@ void printDHT(boolean flag, int32_t humidity, int32_t temperature)
     Serial.println(" *C");    
   }
   
+}
+String compose_sensor_data(int8_t node, int16_t humidity, int16_t temperature, int16_t voltage)
+{
+    String node_str         = String(node, HEX);
+    String humidity_str     = String(humidity);
+    String temperature_str  = String(temperature);
+    String voltage_str      = String(voltage);
+    String separator = "-";        
+  tx_data_string = node_str  ;
+  tx_data_string +=  separator ;
+  tx_data_string +=  humidity_str  ;
+  tx_data_string +=  separator ;
+  tx_data_string +=  temperature_str  ;
+  tx_data_string +=  separator ;
+  tx_data_string +=  voltage  ;
+  
+  return tx_data_string;
 }
 
 // returns VCC in millivolts
