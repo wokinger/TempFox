@@ -85,18 +85,28 @@ uint16_t _reading;
 
 Enrf24 radio(P2_0, P2_1, P2_2);  // P2.0=CE, P2.1=CSN, P2.2=IRQ
 const uint8_t txaddr[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0x01 };
+const uint8_t rxaddr[] = { 0xDE, 0xAD, 0xBE, 0xEF, 10 };
+
 const char *str_on = "ON";
 const char *str_off = "OFF";
+String tx_data_string, humidity_data_string;
+int16_t humidity, temperature;
+
 void dump_radio_status_to_serialport(uint8_t);
+const byte Node_addr = 0x01;
 
 DHT22 mySensor(DHTPIN);
 boolean flag;
+
+// Voltagemeasurement
+#define ANALOG_HALFVCC_INPUT A3
 
 void setup() {
   pinMode(YELLOW_LED, OUTPUT);
   
   Serial.begin(9600);
 
+  analogReference(INTERNAL2V5);
   //setup SPI
   SPI.begin();
   SPI.setDataMode(SPI_MODE0);
@@ -105,12 +115,14 @@ void setup() {
    radio.begin();
    dump_radio_status_to_serialport(radio.radioState());
    radio.setTXaddress((void*)txaddr);
+   radio.setRXaddress((void*)rxaddr);
+ 
  
   // setup DHT
   mySensor.begin();
   
   // setup Software i2c
-  Wire.begin();
+  //Wire.begin();
 
 
  }
@@ -118,45 +130,67 @@ void setup() {
 void loop() {
   digitalWrite(YELLOW_LED,LOW);
   delay(500);
+  
+  // Measure Humidity/Temperature
   // Reading temperature or humidity takes about 250 milliseconds!
   // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
   digitalWrite(YELLOW_LED,HIGH);  
   flag = mySensor.get();
-  printDHT(flag, mySensor.humidityX10(), mySensor.temperatureX10());
+  humidity = mySensor.humidityX10() ;
   
+  temperature = mySensor.temperatureX10();
+  //printDHT(flag, mySensor.humidityX10(), mySensor.temperatureX10());
   
+  // Measure Voltage
+//  Serial.print("VCC value:");
+  int voltage = getVCC();
+//  Serial.println (voltage);
+  delay(1000);
+  
+  // Send data via RF24
   //flashLed(100,5);
+  // TODO change to separate defined strings, then concatenate them!
+  tx_data_string = "";
+  tx_data_string += "Node " ;
+  tx_data_string += rxaddr[4];
+  tx_data_string += " Humidity " ;
+  tx_data_string += String(humidity/10);
+//  tx_data_string += "-";
+//  tx_data_string += String(humidity%10);
+  tx_data_string += " % Temp ";
+  tx_data_string += String(temperature/10);
+//  tx_data_string += "-";
+//  tx_data_string += String(temperature%10);
+  tx_data_string += " degC Voltage ";
+  tx_data_string += String(voltage);
+  tx_data_string += " mV";
+  
   Serial.print("Sending packet: ");
-  Serial.println(str_on);
-  radio.print(str_on);
+  Serial.println(tx_data_string);
+  radio.print(tx_data_string);
   radio.flush();  // Force transmit (don't wait for any more data)
   dump_radio_status_to_serialport(radio.radioState());  // Should report IDLE
   delay(500);
-
-  Serial.print("Sending packet: ");
-  Serial.println(str_off);
-  radio.print(str_off);
-  radio.flush();  //
-  dump_radio_status_to_serialport(radio.radioState());  // Should report IDLE
   
+ 
   // send I2C cmd
     //write
-    Wire.beginTransmission(_address);
-    Wire.write('A');
-    Wire.endTransmission();
-    // read
-    Wire.requestFrom(_address, 2);
-    while (Wire.available() < 2);
-    
-    flashLed(40,5);
-    _reading = Wire.read();
-    _reading = _reading << 8;
-    _reading += Wire.read();
-  Serial.print("I2C Read packet: ");
-    Serial.print(_reading/10, DEC);
-    Serial.print(".");
-    Serial.println(_reading%10, DEC);
-    
+//    Wire.beginTransmission(_address);
+//    Wire.write('A');
+//    Wire.endTransmission();
+//    // read
+//    Wire.requestFrom(_address, 2);
+//    while (Wire.available() < 2);
+//    
+//    flashLed(40,5);
+//    _reading = Wire.read();
+//    _reading = _reading << 8;
+//    _reading += Wire.read();
+//  Serial.print("I2C Read packet: ");
+//    Serial.print(_reading/10, DEC);
+//    Serial.print(".");
+//    Serial.println(_reading%10, DEC);
+//    
 
   
 }
@@ -245,4 +279,19 @@ void printDHT(boolean flag, int32_t humidity, int32_t temperature)
     Serial.println(" *C");    
   }
   
+}
+
+// returns VCC in millivolts
+int getVCC() {
+  // start with the 1.5V internal reference
+  analogReference(INTERNAL1V5);
+  int data = analogRead(ANALOG_HALFVCC_INPUT);
+  // if overflow, VCC is > 3V, switch to the 2.5V reference
+  if (data==0x3ff) {
+    analogReference(INTERNAL2V5);
+    data = (int)map(analogRead(ANALOG_HALFVCC_INPUT), 0, 1023, 0, 5000);
+  } else {
+    data = (int)map(data, 0, 1023, 0, 3000);
+  }
+  return data; 
 }
