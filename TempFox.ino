@@ -96,6 +96,8 @@ void loop() {
   
   tx_data_string = compose_sensor_data(node_addr, humidity, temperature, voltage);
   
+  //TODO : ADD lowpowermode
+  // http://forum.43oh.com/topic/8608-energia-ide-msp430f5529lp-low-power-mode/
   
   Serial.print("Sending packet: ");
   Serial.println(tx_data_string);
@@ -124,6 +126,8 @@ void loop() {
 //    Serial.println(_reading%10, DEC);
 //    
 
+  // TODO: on P2.2 is IRQ vom rf24 --> use lpm4 and wakeup when p2.2 is high
+  //http://energia.nu/AttachInterrupt.html
   
 }
 
