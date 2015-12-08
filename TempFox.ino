@@ -28,9 +28,9 @@ uint16_t _reading;
 #include <SPI.h>
 
 Enrf24 radio(P2_0, P2_1, P2_2);  // P2.0=CE, P2.1=CSN, P2.2=IRQ
-const uint8_t txaddr[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0x01 };
+const uint8_t txaddr[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xff };
 
-const int8_t node_addr = 10;
+const int8_t node_addr = 1;
 const uint8_t rxaddr[] = { 0xDE, 0xAD, 0xBE, 0xEF, node_addr };
 
 const char *str_on = "ON";
@@ -39,7 +39,6 @@ String tx_data_string, humidity_data_string;
 int16_t humidity, temperature;
 
 void dump_radio_status_to_serialport(uint8_t);
-const byte Node_addr = 0x01;
 
 DHT22 mySensor(DHTPIN);
 boolean flag;
@@ -49,7 +48,7 @@ boolean flag;
 
 void setup() {
   pinMode(YELLOW_LED, OUTPUT);
-  
+  digitalWrite(YELLOW_LED,HIGH);
   Serial.begin(9600);
 
   analogReference(INTERNAL2V5);
@@ -63,49 +62,74 @@ void setup() {
    radio.setTXaddress((void*)txaddr);
    radio.setRXaddress((void*)rxaddr);
  
- 
   // setup DHT
   mySensor.begin();
   
   // setup Software i2c
   //Wire.begin();
-
-
+  digitalWrite(YELLOW_LED,LOW);
  }
 
 void loop() {
-  digitalWrite(YELLOW_LED,LOW);
-  delay(500);
+  char inbuf[33];
+
+  radio.enableRX();  // Start listening
+  Serial.print("Waiting for Ping ");
   
-  // Measure Humidity/Temperature
-  // Reading temperature or humidity takes about 250 milliseconds!
-  // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
-  digitalWrite(YELLOW_LED,HIGH);  
-  flag = mySensor.get();
-  humidity = mySensor.humidityX10() ;
+  while (!radio.available(true))
+    ;
+  digitalWrite(YELLOW_LED,HIGH);
+  if (radio.read(inbuf)) {
+    Serial.print("Received packet: ");
+    Serial.println(inbuf);
+    radio.disableRX();
+    // Measure Humidity/Temperature
+    // Reading temperature or humidity takes about 250 milliseconds!
+    // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
+    digitalWrite(YELLOW_LED,LOW);  
+ 
+    delay(200);
+    flag = mySensor.get();
+    humidity = mySensor.humidityX10() ;
+    delay(100);
+ 
+    temperature = mySensor.temperatureX10();
+    //printDHT(flag, mySensor.humidityX10(), mySensor.temperatureX10());
   
-  temperature = mySensor.temperatureX10();
-  //printDHT(flag, mySensor.humidityX10(), mySensor.temperatureX10());
+    // Measure Voltage
+    //  Serial.print("VCC value:");
+    int voltage = getVCC();
+    //  Serial.println (voltage);
+    delay(100);
+    
+    //tx_data_string = compose_sensor_data(node_addr, humidity, temperature, voltage);
   
-  // Measure Voltage
-//  Serial.print("VCC value:");
-  int voltage = getVCC();
-//  Serial.println (voltage);
-  delay(1000);
+    String node_str         = String(node_addr, HEX);
+    String humidity_str     = String(humidity);
+    String temperature_str  = String(temperature);
+    String voltage_str      = String(voltage);
+    String separator = "-";      
+    
+    tx_data_string = node_str  ;
+    tx_data_string +=  separator ;
+    tx_data_string +=  humidity_str  ;
+    tx_data_string +=  separator ;
+    tx_data_string +=  temperature_str  ;
+    tx_data_string +=  separator ;
+    tx_data_string +=  voltage  ;
+    Serial.print(" data: tx_data_string: ");
+    Serial.println(tx_data_string);
   
-  
-  tx_data_string = compose_sensor_data(node_addr, humidity, temperature, voltage);
-  
-  //TODO : ADD lowpowermode
-  // http://forum.43oh.com/topic/8608-energia-ide-msp430f5529lp-low-power-mode/
-  
-  Serial.print("Sending packet: ");
-  Serial.println(tx_data_string);
-  radio.print(tx_data_string);
-  radio.flush();  // Force transmit (don't wait for any more data)
-  dump_radio_status_to_serialport(radio.radioState());  // Should report IDLE
-  delay(500);
-  
+    //TODO : ADD lowpowermode
+    // http://forum.43oh.com/topic/8608-energia-ide-msp430f5529lp-low-power-mode/
+      
+    radio.print(tx_data_string);
+    radio.flush();  // Force transmit (don't wait for any more data)
+    //dump_radio_status_to_serialport(radio.radioState());  // Should report IDLE
+    radio.deepsleep();
+    //dump_radio_status_to_serialport(radio.radioState());  // Should report IDLE
+    delay(500);
+ 
  
   // send I2C cmd
     //write
@@ -128,7 +152,7 @@ void loop() {
 
   // TODO: on P2.2 is IRQ vom rf24 --> use lpm4 and wakeup when p2.2 is high
   //http://energia.nu/AttachInterrupt.html
-  
+    }
 }
 
 void flashLed(int time, int NrOfFlash) {
@@ -220,7 +244,8 @@ String compose_sensor_data(int8_t node, int16_t humidity, int16_t temperature, i
     String humidity_str     = String(humidity);
     String temperature_str  = String(temperature);
     String voltage_str      = String(voltage);
-    String separator = "-";        
+    String separator = "-";      
+    
   tx_data_string = node_str  ;
   tx_data_string +=  separator ;
   tx_data_string +=  humidity_str  ;
@@ -228,7 +253,8 @@ String compose_sensor_data(int8_t node, int16_t humidity, int16_t temperature, i
   tx_data_string +=  temperature_str  ;
   tx_data_string +=  separator ;
   tx_data_string +=  voltage  ;
-  
+  Serial.print(" data: tx_data_string: ");
+  Serial.println(tx_data_string);
   return tx_data_string;
 }
 
