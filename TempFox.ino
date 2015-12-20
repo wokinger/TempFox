@@ -30,7 +30,7 @@ uint16_t _reading;
 Enrf24 radio(P2_0, P2_1, P2_2);  // P2.0=CE, P2.1=CSN, P2.2=IRQ
 const uint8_t txaddr[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xff };
 
-const int8_t node_addr = 1;
+const int8_t node_addr = 10;
 const uint8_t rxaddr[] = { 0xDE, 0xAD, 0xBE, 0xEF, node_addr };
 
 const char *str_on = "ON";
@@ -74,36 +74,34 @@ void loop() {
   char inbuf[33];
 
   radio.enableRX();  // Start listening
-  Serial.print("Waiting for Ping ");
+  //Serial.print("Waiting for Ping ");
   
   while (!radio.available(true))
     ;
   digitalWrite(YELLOW_LED,HIGH);
   if (radio.read(inbuf)) {
-    Serial.print("Received packet: ");
-    Serial.println(inbuf);
-    radio.disableRX();
+    //Serial.print("Received packet: ");
+    //Serial.println(inbuf);
+    // radio.disableRX();
     // Measure Humidity/Temperature
     // Reading temperature or humidity takes about 250 milliseconds!
     // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
     digitalWrite(YELLOW_LED,LOW);  
  
-    delay(200);
+    //delay(50);
     flag = mySensor.get();
     humidity = mySensor.humidityX10() ;
-    delay(100);
+    //delay(100);
  
     temperature = mySensor.temperatureX10();
-    //printDHT(flag, mySensor.humidityX10(), mySensor.temperatureX10());
-  
+    
     // Measure Voltage
     //  Serial.print("VCC value:");
     int voltage = getVCC();
     //  Serial.println (voltage);
-    delay(100);
+    //delay(100);
     
-    //tx_data_string = compose_sensor_data(node_addr, humidity, temperature, voltage);
-  
+    
     String node_str         = String(node_addr, HEX);
     String humidity_str     = String(humidity);
     String temperature_str  = String(temperature);
@@ -117,7 +115,7 @@ void loop() {
     tx_data_string +=  temperature_str  ;
     tx_data_string +=  separator ;
     tx_data_string +=  voltage  ;
-    Serial.print(" data: tx_data_string: ");
+    Serial.print(" tx_data_string: ");
     Serial.println(tx_data_string);
   
     //TODO : ADD lowpowermode
@@ -127,8 +125,8 @@ void loop() {
     radio.flush();  // Force transmit (don't wait for any more data)
     //dump_radio_status_to_serialport(radio.radioState());  // Should report IDLE
     radio.deepsleep();
-    //dump_radio_status_to_serialport(radio.radioState());  // Should report IDLE
-    delay(500);
+    dump_radio_status_to_serialport(radio.radioState());  // Should report IDLE
+    //delay(00);
  
  
   // send I2C cmd
@@ -163,28 +161,6 @@ void flashLed(int time, int NrOfFlash) {
     delay(time/2);
    } 
 
-}
-int16_t GetBatteryVoltage() {
-
-  //TODO
-  // measure batteryvoltage on ADC pin, report back.
-  // see AnalogInput example,
-  // use one of the 8 channels
-}
-void sendPacket() {
-  Serial.print("Sending packet: ");
-  Serial.println(str_on);
-  radio.print(str_on);
-  radio.flush();  // Force transmit (don't wait for any more data)
-  dump_radio_status_to_serialport(radio.radioState());  // Should report IDLE
-  delay(100);
-
-  Serial.print("Sending packet: ");
-  Serial.println(str_off);
-  radio.print(str_off);
-  radio.flush();  //
-  dump_radio_status_to_serialport(radio.radioState());  // Should report IDLE
-  delay(100);
 }
 
 void dump_radio_status_to_serialport(uint8_t status)
@@ -237,25 +213,6 @@ void printDHT(boolean flag, int32_t humidity, int32_t temperature)
     Serial.println(" *C");    
   }
   
-}
-String compose_sensor_data(int8_t node, int16_t humidity, int16_t temperature, int16_t voltage)
-{
-    String node_str         = String(node, HEX);
-    String humidity_str     = String(humidity);
-    String temperature_str  = String(temperature);
-    String voltage_str      = String(voltage);
-    String separator = "-";      
-    
-  tx_data_string = node_str  ;
-  tx_data_string +=  separator ;
-  tx_data_string +=  humidity_str  ;
-  tx_data_string +=  separator ;
-  tx_data_string +=  temperature_str  ;
-  tx_data_string +=  separator ;
-  tx_data_string +=  voltage  ;
-  Serial.print(" data: tx_data_string: ");
-  Serial.println(tx_data_string);
-  return tx_data_string;
 }
 
 // returns VCC in millivolts
