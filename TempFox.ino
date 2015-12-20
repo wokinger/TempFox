@@ -74,11 +74,12 @@ void loop() {
   char inbuf[33];
 
   radio.enableRX();  // Start listening
+  digitalWrite(YELLOW_LED,LOW);  
   //Serial.print("Waiting for Ping ");
   
   while (!radio.available(true))
     ;
-  digitalWrite(YELLOW_LED,HIGH);
+  
   if (radio.read(inbuf)) {
     //Serial.print("Received packet: ");
     //Serial.println(inbuf);
@@ -86,7 +87,6 @@ void loop() {
     // Measure Humidity/Temperature
     // Reading temperature or humidity takes about 250 milliseconds!
     // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
-    digitalWrite(YELLOW_LED,LOW);  
  
     //delay(50);
     flag = mySensor.get();
@@ -127,6 +127,7 @@ void loop() {
     radio.deepsleep();
     dump_radio_status_to_serialport(radio.radioState());  // Should report IDLE
     //delay(00);
+    flashLed(40,5);
  
  
   // send I2C cmd
@@ -138,7 +139,6 @@ void loop() {
 //    Wire.requestFrom(_address, 2);
 //    while (Wire.available() < 2);
 //    
-//    flashLed(40,5);
 //    _reading = Wire.read();
 //    _reading = _reading << 8;
 //    _reading += Wire.read();
