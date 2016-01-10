@@ -30,9 +30,10 @@ uint16_t _reading;
 Enrf24 radio(P2_0, P2_1, P2_2);  // P2.0=CE, P2.1=CSN, P2.2=IRQ
 const uint8_t txaddr[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xff };
 
-const int8_t node_addr = 10;
+const int8_t node_addr = 2;
 const uint8_t rxaddr[] = { 0xDE, 0xAD, 0xBE, 0xEF, node_addr };
 
+const int timeout = 10000; // 10sec between the measurements
 const char *str_on = "ON";
 const char *str_off = "OFF";
 String tx_data_string, humidity_data_string;
@@ -57,11 +58,19 @@ void setup() {
   SPI.setDataMode(SPI_MODE0);
   SPI.setBitOrder(MSBFIRST);
  
-   radio.begin();
-   dump_radio_status_to_serialport(radio.radioState());
+  radio.begin();
+   radio.setChannel(0x4c);
+   radio.autoAck(true);
+   radio.setAutoAckParams(15,15);
+   radio.setSpeed(250000);
+   
    radio.setTXaddress((void*)txaddr);
    radio.setRXaddress((void*)rxaddr);
- 
+   radio.enableRX();
+   radio.deepsleep();
+    
+  dump_radio_status_to_serialport(radio.radioState());
+   
   // setup DHT
   mySensor.begin();
   
@@ -73,34 +82,15 @@ void setup() {
 void loop() {
   char inbuf[33];
 
-  radio.enableRX();  // Start listening
-  digitalWrite(YELLOW_LED,LOW);  
-  //Serial.print("Waiting for Ping ");
-  
-  while (!radio.available(true))
-    ;
-  
-  if (radio.read(inbuf)) {
-    //Serial.print("Received packet: ");
-    //Serial.println(inbuf);
-    // radio.disableRX();
-    // Measure Humidity/Temperature
-    // Reading temperature or humidity takes about 250 milliseconds!
-    // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
- 
-    //delay(50);
+
+  sleep(node_addr*1000);
+  if (true) {
+    
+    flashLed(50,10);    
     flag = mySensor.get();
-    humidity = mySensor.humidityX10() ;
-    //delay(100);
- 
+    humidity = mySensor.humidityX10() ; 
     temperature = mySensor.temperatureX10();
-    
-    // Measure Voltage
-    //  Serial.print("VCC value:");
     int voltage = getVCC();
-    //  Serial.println (voltage);
-    //delay(100);
-    
     
     String node_str         = String(node_addr, HEX);
     String humidity_str     = String(humidity);
@@ -118,39 +108,18 @@ void loop() {
     Serial.print(" tx_data_string: ");
     Serial.println(tx_data_string);
   
-    //TODO : ADD lowpowermode
-    // http://forum.43oh.com/topic/8608-energia-ide-msp430f5529lp-low-power-mode/
-      
     radio.print(tx_data_string);
     radio.flush();  // Force transmit (don't wait for any more data)
     //dump_radio_status_to_serialport(radio.radioState());  // Should report IDLE
     radio.deepsleep();
-    dump_radio_status_to_serialport(radio.radioState());  // Should report IDLE
-    //delay(00);
-    flashLed(40,5);
- 
- 
-  // send I2C cmd
-    //write
-//    Wire.beginTransmission(_address);
-//    Wire.write('A');
-//    Wire.endTransmission();
-//    // read
-//    Wire.requestFrom(_address, 2);
-//    while (Wire.available() < 2);
-//    
-//    _reading = Wire.read();
-//    _reading = _reading << 8;
-//    _reading += Wire.read();
-//  Serial.print("I2C Read packet: ");
-//    Serial.print(_reading/10, DEC);
-//    Serial.print(".");
-//    Serial.println(_reading%10, DEC);
-//    
+    dump_radio_status_to_serialport(radio.radioState());  // Should report deepsleep
 
-  // TODO: on P2.2 is IRQ vom rf24 --> use lpm4 and wakeup when p2.2 is high
-  //http://energia.nu/AttachInterrupt.html
-    }
+    flashLed(50,10);
+    
+    // sleep for remaining to the max intervall
+    sleep(timeout-node_addr);
+
+   }
 }
 
 void flashLed(int time, int NrOfFlash) {
@@ -159,7 +128,8 @@ void flashLed(int time, int NrOfFlash) {
     delay(time/2);
     digitalWrite(YELLOW_LED,HIGH);  
     delay(time/2);
-   } 
+    digitalWrite(YELLOW_LED,LOW);  
+    } 
 
 }
 
@@ -220,12 +190,11 @@ int getVCC() {
   // start with the 1.5V internal reference
   analogReference(INTERNAL1V5);
   int data = analogRead(ANALOG_HALFVCC_INPUT);
-  // if overflow, VCC is > 3V, switch to the 2.5V reference
-  if (data==0x3ff) {
-    analogReference(INTERNAL2V5);
-    data = (int)map(analogRead(ANALOG_HALFVCC_INPUT), 0, 1023, 0, 5000);
-  } else {
-    data = (int)map(data, 0, 1023, 0, 3000);
-  }
+
+  // map the measured voltage to the internal reference  
+  data = (int)map(data, 0, 1023, 0, 1500);
+  
+  // apply resistor network multiplier 100k/20k = 6 to calculate the supply voltage
+  data = data * 6;
   return data; 
 }
