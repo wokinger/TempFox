@@ -30,10 +30,10 @@ uint16_t _reading;
 Enrf24 radio(P2_0, P2_1, P2_2);  // P2.0=CE, P2.1=CSN, P2.2=IRQ
 const uint8_t txaddr[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xff };
 
-const int8_t node_addr = 2;
+const int8_t node_addr = 1;
 const uint8_t rxaddr[] = { 0xDE, 0xAD, 0xBE, 0xEF, node_addr };
 
-const int timeout = 10000; // 10sec between the measurements
+const int timeout = 30*1000; // time between the measurements
 const char *str_on = "ON";
 const char *str_off = "OFF";
 String tx_data_string, humidity_data_string;
@@ -86,7 +86,7 @@ void loop() {
   sleep(node_addr*1000);
   if (true) {
     
-    flashLed(50,10);    
+    flashLed(5,1);    
     flag = mySensor.get();
     humidity = mySensor.humidityX10() ; 
     temperature = mySensor.temperatureX10();
@@ -114,7 +114,7 @@ void loop() {
     radio.deepsleep();
     dump_radio_status_to_serialport(radio.radioState());  // Should report deepsleep
 
-    flashLed(50,10);
+    //flashLed(50,10);
     
     // sleep for remaining to the max intervall
     sleep(timeout-node_addr);
